@@ -1,9 +1,19 @@
 # Cubes Server
+
+## Verwendung
+Aktuell steht ein JAR-File des Servers im Wurzelverzeichnis des Repositories. Der Server wird mit einem Argument, der Portnummer, gestartet:
+
+```
+java -jar CubesServer.jar 4321
+```
+
+Der Server gibt fleißig aus, was er so empfängt und sendet. Das hilft hoffentlich für das Debugging. Sobald man die Return-Taste drückt, terminiert der Server, nachdem er an alle bekannten Clients eine `End`-Nachricht gesendet hat (siehe unten):
+
+## Nachrichten
 Alle Nachrichten sind in JSON kodierte Maps (Liste von
 Key-Value-Paaren). Keys und Values sind einfache Strings. Der verwendete
 Zeichensatz ist UTF-8.
 
-## Nachrichten
 Der Client meldet sich beim Server mittels einer `Hello`-Nachricht an:
 
 ### Hello
