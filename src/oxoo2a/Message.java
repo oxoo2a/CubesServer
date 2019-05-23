@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public class Message {
     public Message () {
@@ -15,8 +16,12 @@ public class Message {
         data.put(key,value);
     }
 
-    public String get(String key ) {
-        return data.get(key);
+    public Optional<String> get(String key ) {
+        String v = data.get(key);
+        if (v == null)
+            return Optional.empty();
+        else
+            return Optional.of(v);
     }
 
     public String getJSON () {
@@ -58,6 +63,12 @@ public class Message {
         m.set("sender",sender);
         m.set("content",content);
         m.set("world", isWorldMessage ? "true" : "false");
+        return m;
+    }
+
+    public static Message createEndMessage () {
+        Message m = new Message();
+        m.set("type","end");
         return m;
     }
 

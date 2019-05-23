@@ -4,11 +4,13 @@ import java.io.*;
 import java.net.Socket;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 
 public class ClientConnect {
-    public ClientConnect ( Socket client, Map<String,ClientConnect> namedClients ) {
+    public ClientConnect ( Socket client, Map<String,ClientConnect> namedClients, String position ) {
         this.client = client;
         this.namedClients = namedClients;
+        this.position = position;
         name = "John Doe" + this.hashCode();
         synchronized (namedClients) {
             namedClients.put(name,this);
@@ -19,6 +21,46 @@ public class ClientConnect {
 
         inputThread = new Thread(this::handleInput);
         inputThread.start();
+    }
+
+    private void handleHelloMessage ( Message m ) {
+        // TODO Maybe it is not the first hello message from client
+        Optional<String> trueName = m.get("name");
+        if (trueName.isPresent()) {
+            synchronized (namedClients) {
+                namedClients.remove(name);
+                namedClients.put(trueName.get(),this); // TODO Name might be in map already
+            }
+            name = trueName.get();
+        }
+        else
+            System.out.printf("In message <%s> is no name defined\n",m.toString());
+        Message welcome = Message.createWelcomeMessage(position);
+        deliverMessage(welcome);
+    }
+
+    private void handleChatMessage ( Message m ) {
+        Optional<String> receiver = m.get("receiver");
+        Optional<String> content = m.get("content");
+        if ((receiver.isPresent()) && (content.isPresent())) {
+            Message answer = Message.createChatMessage(name,content.get(),false);
+            if (receiver.get().equalsIgnoreCase("world")) {
+                answer.set("world","true");
+                Collection<ClientConnect> clients = namedClients.values();
+                for (ClientConnect c : clients) {
+                    c.deliverMessage(answer);
+                }
+            }
+            else {
+                ClientConnect destination = namedClients.get(receiver.get());
+                if (destination != null)
+                    destination.deliverMessage(answer);
+                else
+                    System.out.printf("Unknown receiver <%s>; ignoring chat message\n",receiver.get());
+            }
+        }
+        else
+            System.out.printf("Chat message <%s> has no receiver and/or content\n",m.toString());
     }
 
     private void handleInput () {
@@ -33,52 +75,23 @@ public class ClientConnect {
                 }
                 System.out.printf("Receiving <%s> from %s\n",rawInput,name);
                 Message m = Message.FromJSON(rawInput);
-                String messageType = m.get("type");
-                if (messageType != null) {
-                    if (messageType.equalsIgnoreCase("hello")) {
-                        // TODO Maybe it is not the first hello message from client
-                        String trueName = m.get("name");
-                        if (trueName != null) {
-                            synchronized (namedClients) {
-                                namedClients.remove(name);
-                                namedClients.put(trueName,this); // TODO Name might be in map already
-                            }
-                            name = trueName;
-                        }
-                        else
-                            System.out.printf("In message <%s> is no name defined\n",rawInput);
-                        Message welcome = Message.createWelcomeMessage("0,0,0"); // TODO compute position
-                        deliverMessage(welcome);
-                    }
-                    else if (messageType.equalsIgnoreCase("chat")) {
-                        String receiver = m.get("receiver");
-                        String content = m.get("content");
-                        if ((receiver != null) && (content != null)) {
-                            Message answer = Message.createChatMessage(name,content,false);
-                            if (receiver.equalsIgnoreCase("world")) {
-                                answer.set("world","true");
-                                Collection<ClientConnect> clients = namedClients.values();
-                                for (ClientConnect c : clients) {
-                                    c.deliverMessage(answer);
-                                }
-                            }
-                            else {
-                                // TODO unknown receiver
-                                ClientConnect destination = namedClients.get(receiver);
-                                destination.deliverMessage(answer);
-                            }
-                        }
-                        else
-                            System.out.printf("Chat message <%s> has no receiver and/or content\n",rawInput);
-                    }
-                }
-                else
+
+                Optional<String> messageType = m.get("type");
+                if (messageType.isEmpty()) {
                     System.out.printf("There is no type field in message <%s> from %s\n",rawInput,name);
+                    break;
+                }
+                messageType.ifPresent(t -> {
+                    if (t.equalsIgnoreCase("hello"))
+                        handleHelloMessage(m);
+                    else if (t.equalsIgnoreCase("chat"))
+                        handleChatMessage(m);
+                    else
+                        System.out.printf("Chat message <%s> has no receiver and/or content\n", m.toString());
+                });
             } while (true);
             client.close();
-            if (namedClients.containsKey(name)) {
-                namedClients.remove(name);
-            }
+            namedClients.remove(name);
         }
         catch (IOException e) {
             Main.fatal("There was an IOException while receiving data ...",e);
@@ -108,6 +121,7 @@ public class ClientConnect {
     }
 
     private Socket client;
+    private String position;
     private Map<String,ClientConnect> namedClients;
     private Thread inputThread;
     private BufferedReader input;

@@ -32,18 +32,41 @@ public class Main {
         listenThread.start();
 
         // Wait for user input to stop server and send terminate messages to all clients
+        System.out.println("Press enter to terminate server ...");
+        System.in.read();
 
+        Message theEnd = Message.createEndMessage();
+        for ( ClientConnect c : namedClients.values()) {
+            c.deliverMessage(theEnd);
+        }
     }
 
-    // ************************************************************************
-    // Server
-    // ************************************************************************
+    private static String getCoordinates ( int w ) {
+
+        final double a = 100.0;
+        final double b = 1.0;
+        final double c = 10;
+
+        double wd = (double) w / b;
+
+        double x = a * wd * Math.cos(wd);
+        double y = a * wd * Math.sin(wd);
+        double z = Math.sin(wd) * c;
+
+        int xi = (int) x;
+        int yi = (int) y;
+        int zi = (int) z;
+
+        return Integer.toString(xi) + ',' + yi + ',' + zi;
+    }
+
     private static void listen ( int port ) {
         try {
             ServerSocket s = new ServerSocket(port);
+            int cNumber = 0;
             while (true) {
                 Socket client = s.accept();
-                ClientConnect cc = new ClientConnect(client, namedClients);
+                ClientConnect cc = new ClientConnect(client, namedClients, getCoordinates(cNumber++));
             }
         }
         catch (Exception e) {
