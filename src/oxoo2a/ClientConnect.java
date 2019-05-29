@@ -3,6 +3,7 @@ package oxoo2a;
 import java.io.*;
 import java.net.Socket;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -11,7 +12,7 @@ public class ClientConnect {
         this.client = client;
         this.namedClients = namedClients;
         this.position = position;
-        name = "John Doe" + this.hashCode();
+        name = "John Doe - " + this.hashCode();
         synchronized (namedClients) {
             namedClients.put(name,this);
         }
@@ -21,6 +22,10 @@ public class ClientConnect {
 
         inputThread = new Thread(this::handleInput);
         inputThread.start();
+    }
+
+    public String getPosition () {
+        return position;
     }
 
     private void handleHelloMessage ( Message m ) {
@@ -63,6 +68,20 @@ public class ClientConnect {
             System.out.printf("Chat message <%s> has no receiver and/or content\n",m.toString());
     }
 
+    private void handleGetStateMessage ( Message m ) {
+        Map<String,String> positions = new HashMap<>();
+        for ( ClientConnect c : namedClients.values()) {
+            positions.put(c.name,c.getPosition());
+        }
+        Optional<String> positionsAsJSON = JSONProcessor.serialize(positions);
+        if (positionsAsJSON.isEmpty()) {
+            System.out.printf("Failed to serialize positions\n");
+            return;
+        }
+        Message state = Message.createStateMessage(positionsAsJSON.get());
+        deliverMessage(state);
+    }
+
     private void handleInput () {
         try {
             input = new BufferedReader(new InputStreamReader(client.getInputStream()));
@@ -74,18 +93,24 @@ public class ClientConnect {
                     break;
                 }
                 System.out.printf("Receiving <%s> from %s\n",rawInput,name);
-                Message m = Message.FromJSON(rawInput);
-
+                Optional<Message> mOptional = Message.deserialize(rawInput);
+                if (mOptional.isEmpty()) {
+                    System.out.printf("Ignoring message <%s> (unable to deserialize)\n",rawInput);
+                    continue;
+                }
+                Message m = mOptional.get();
                 Optional<String> messageType = m.get("type");
                 if (messageType.isEmpty()) {
-                    System.out.printf("There is no type field in message <%s> from %s\n",rawInput,name);
-                    break;
+                    System.out.printf("There is no type field in message <%s> from %s; ignoring\n",rawInput,name);
+                    continue;
                 }
                 messageType.ifPresent(t -> {
                     if (t.equalsIgnoreCase("hello"))
                         handleHelloMessage(m);
                     else if (t.equalsIgnoreCase("chat"))
                         handleChatMessage(m);
+                    else if (t.equalsIgnoreCase("getState"))
+                        handleGetStateMessage(m);
                     else
                         System.out.printf("Chat message <%s> has no receiver and/or content\n", m.toString());
                 });
@@ -108,7 +133,12 @@ public class ClientConnect {
                 Main.fatal("Unable to open output stream",e);
             }
         }
-        String rawOutput = m.getJSON();
+        Optional<String> rawOutputOptional = m.serialize();
+        if (rawOutputOptional.isEmpty()) {
+            System.out.printf("Discarding message <%s> (error while serializing)\n",m.toString());
+            return;
+        }
+        String rawOutput = rawOutputOptional.get();
         System.out.printf("Sending <%s> to client %s\n",rawOutput,name);
         try {
             output.write(rawOutput);

@@ -24,30 +24,20 @@ public class Message {
             return Optional.of(v);
     }
 
-    public String getJSON () {
-        ObjectMapper mapper = new ObjectMapper();
-        String dataAsJSON = null;
-        try {
-            dataAsJSON = mapper.writeValueAsString(data);
-        }
-        catch (JsonProcessingException e) {
-            System.err.printf("Unable to serialize map <%s> to JSON\n",data.toString());
-            System.err.println(e.getMessage());
-        }
-        return dataAsJSON;
+    public Optional<String> serialize() {
+        return JSONProcessor.serialize(data);
     }
 
-    public static Message FromJSON ( String raw ) {
-        ObjectMapper mapper = new ObjectMapper();
+    @SuppressWarnings("unchecked")
+    public static Optional<Message> deserialize(String raw ) {
         Message m = new Message();
-        try {
-            m.data = mapper.readValue(raw, m.data.getClass());
+        var obj = JSONProcessor.deserialize(raw,m.data.getClass());
+        if (obj.isPresent()) {
+            m.data = obj.get();
+            return Optional.of(m);
         }
-        catch (Exception e) {
-            System.err.printf("Unable to deserialize <%s> to map\n",raw);
-            System.err.println(e.getMessage());
-        };
-        return m;
+        else
+            return Optional.empty();
     }
 
     public static Message createWelcomeMessage ( String coordinate ) {
@@ -63,6 +53,13 @@ public class Message {
         m.set("sender",sender);
         m.set("content",content);
         m.set("world", isWorldMessage ? "true" : "false");
+        return m;
+    }
+
+    public static Message createStateMessage ( String positions ) {
+        Message m = new Message();
+        m.set("type","state");
+        m.set("positions",positions);
         return m;
     }
 
